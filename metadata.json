@@ -1,0 +1,6 @@
+{
+  "name": "Discord Quest Completer",
+  "description": "An Android application to help manage and complete Discord quests securely with local token input and robust API background tasks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
