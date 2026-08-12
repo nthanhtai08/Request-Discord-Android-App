@@ -425,6 +425,8 @@ class DiscordQuestService : Service() {
                         ?: progressObj?.optJSONObject("PLAY_ON_DESKTOP")
                         ?: progressObj?.optJSONObject("STREAM_ON_DESKTOP")
                         ?: progressObj?.optJSONObject("PLAY_ACTIVITY")
+                        ?: progressObj?.optJSONObject("WATCH_VIDEO")
+                        ?: progressObj?.optJSONObject("WATCH_VIDEO_ON_MOBILE")
                         
                     taskDef?.optInt("value") ?: (currentProgressSecs + delaySeconds)
                 } else {
