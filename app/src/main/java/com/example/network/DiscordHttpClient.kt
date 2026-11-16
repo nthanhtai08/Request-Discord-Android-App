@@ -18,7 +18,7 @@ object DiscordHttpClient {
 
     // Không chặn quest nào nữa, load full. Muốn chặn quest lỗi thì thêm ID vào đây.
     private val BLACKLISTED_QUEST_IDS = emptySet<String>()
-
+    val enrolledAtMillis = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "discord/1.0.9237 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36"
@@ -299,7 +299,10 @@ object DiscordHttpClient {
                 val userStatus = qObj.optObj("user_status", "userStatus")
                 val enrolledAt = userStatus?.optStr("enrolled_at", "enrolledAt")
                 val completedAt = userStatus?.optStr("completed_at", "completedAt")
-
+                if (!enrolledAt.isNullOrEmpty()) {
+                    val ms = parseIsoDateToMillis(enrolledAt)
+                    if (ms > 0L) enrolledAtMillis.putIfAbsent(id, ms)
+                }
                 // Progress: chỉ đọc đúng task đang theo dõi
                 var progress = 0
                 val progressObj = userStatus?.optJSONObject("progress")
