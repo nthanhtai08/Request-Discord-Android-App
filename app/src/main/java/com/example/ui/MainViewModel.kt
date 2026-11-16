@@ -66,14 +66,14 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
                         type = "success"
                     )
                 )
-                
+
                 // Fetch channels & quests
                 refreshQuests(token)
                 onComplete(true)
             } else {
                 db.taskLogDao().insertLog(
                     TaskLog(
-                        timestamp = java.lang.System.currentTimeMillis(),
+                        timestamp = System.currentTimeMillis(),
                         text = "Authentication failed: Discord endpoint rejected this access token.",
                         type = "err"
                     )
@@ -84,13 +84,10 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
     }
 
     fun refreshQuests(token: String) {
-        // Run via Service triggers
-        val dummyIntent = Intent()
-        DiscordQuestService.activeQuests.value.let {
-            // Service handles background fetching with logging
-            viewModelScope.launch {
-                _service?.refreshQuests(token)
-            }
+        // Service handles background fetching with logging.
+        // Note: does nothing if the service is not bound yet.
+        viewModelScope.launch {
+            _service?.refreshQuests(token)
         }
     }
 
@@ -115,7 +112,7 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
                 )
                 db.taskLogDao().insertLog(
                     TaskLog(
-                        timestamp = java.lang.System.currentTimeMillis(),
+                        timestamp = System.currentTimeMillis(),
                         text = "Settings updated successfully",
                         type = "info"
                     )
@@ -130,24 +127,18 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
         }
     }
 
+    // Quest selection state lives in the service's companion object,
+    // so it works whether or not the service is currently bound.
     fun toggleQuestSelection(questId: String) {
-        _service?.toggleQuestSelection(questId) ?: run {
-            // Fallback if service is not yet bound
-            val current = DiscordQuestService.selectedQuestIds.value
-            if (current.contains(questId)) {
-                DiscordQuestService.toggleQuestSelection(questId)
-            } else {
-                DiscordQuestService.toggleQuestSelection(questId)
-            }
-        }
+        DiscordQuestService.toggleQuestSelection(questId)
     }
 
     fun selectAll(quests: List<DiscordQuest>) {
-        _service?.selectAllQuests(quests) ?: DiscordQuestService.selectAllQuests(quests)
+        DiscordQuestService.selectAllQuests(quests)
     }
 
     fun deselectAll() {
-        _service?.deselectAllQuests() ?: DiscordQuestService.deselectAllQuests()
+        DiscordQuestService.deselectAllQuests()
     }
 
     fun startAutomation(context: Context) {
