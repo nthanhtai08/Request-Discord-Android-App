@@ -12,6 +12,7 @@ import com.example.data.TaskLog
 import com.example.network.DiscordHttpClient
 import com.example.service.DiscordQuestService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -29,6 +30,28 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
     val activeQuests: StateFlow<List<DiscordQuest>> = DiscordQuestService.activeQuests
     val selectedQuestIds: StateFlow<Set<String>> = DiscordQuestService.selectedQuestIds
 
+    init {
+        // Tự làm mới danh sách mỗi 5 phút để quest mới ra (đến giờ cày) tự hiện
+        // và quest hết hạn tự biến mất. Bỏ qua khi đang chạy automation.
+        viewModelScope.launch {
+            db.discordAccountDao().getAccountFlow()
+                .map { it?.token }
+                .distinctUntilChanged()
+                .collectLatest { token ->
+                    if (token.isNullOrEmpty()) return@collectLatest
+                    while (true) {
+                        if (!DiscordQuestService.isExecuting.value) {
+                            val quests = withContext(Dispatchers.IO) {
+                                DiscordHttpClient.getQuests(token)
+                            }
+                            DiscordQuestService.publishQuests(quests)
+                        }
+                        delay(5 * 60_000L)
+                    }
+                }
+        }
+    }
+
     fun saveTokenAndInit(token: String, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             db.taskLogDao().insertLog(
@@ -44,10 +67,11 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
             }
 
             if (meObj != null) {
-                val username = meObj.optString("username") ?: "Unknown User"
-                val disc = meObj.optString("discriminator") ?: "0000"
+                val username = meObj.optString("username").ifEmpty { "Unknown User" }
+                val disc = meObj.optString("discriminator").ifEmpty { "0000" }
                 val formattedName = if (disc == "0" || disc == "0000") username else "$username#$disc"
-                val avatarHash = meObj.optString("avatar") ?: ""
+                // optString trả "null" khi avatar là null, phải check isNull
+                val avatarHash = if (meObj.isNull("avatar")) "" else meObj.optString("avatar")
                 val avatarUrl = if (avatarHash.isNotEmpty()) {
                     "https://cdn.discordapp.com/avatars/${meObj.optString("id")}/$avatarHash.png"
                 } else ""
@@ -67,14 +91,13 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
                     )
                 )
 
-                // Fetch channels & quests
                 refreshQuests(token)
                 onComplete(true)
             } else {
                 db.taskLogDao().insertLog(
                     TaskLog(
                         timestamp = System.currentTimeMillis(),
-                        text = "Authentication failed: Discord endpoint rejected this access token.",
+                        text = "Authentication failed: token sai hoặc không kết nối được tới Discord.",
                         type = "err"
                     )
                 )
@@ -84,18 +107,34 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
     }
 
     fun refreshQuests(token: String) {
-        // Service handles background fetching with logging.
-        // Note: does nothing if the service is not bound yet.
         viewModelScope.launch {
-            _service?.refreshQuests(token)
+            val svc = _service
+            if (svc != null) {
+                svc.refreshQuests(token)
+            } else {
+                // Service chưa bind: gọi API trực tiếp thay vì không làm gì
+                val quests = withContext(Dispatchers.IO) {
+                    DiscordHttpClient.getQuests(token)
+                }
+                DiscordQuestService.publishQuests(quests)
+                db.taskLogDao().insertLog(
+                    TaskLog(
+                        timestamp = System.currentTimeMillis(),
+                        text = "Loaded ${quests.size} quests from Discord API.",
+                        type = "success"
+                    )
+                )
+            }
         }
     }
 
     fun logout() {
         viewModelScope.launch {
+            // Dừng automation đang chạy (nếu có) trước khi xóa token
+            DiscordQuestService.requestStop()
             db.discordAccountDao().deleteAccount()
             db.taskLogDao().clearLogs()
-            DiscordQuestService.deselectAllQuests()
+            DiscordQuestService.resetState()
         }
     }
 
