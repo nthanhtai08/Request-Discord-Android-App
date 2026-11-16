@@ -144,15 +144,15 @@ class DiscordQuestService : Service() {
     }
 
     // Toggle Quest Selection Checkbox
-    fun toggleQuestSelection(questId: String) {
+    fun toggleQuestSelectionInstance(questId: String) {
         Companion.toggleQuestSelection(questId)
     }
 
-    fun selectAllQuests(quests: List<DiscordQuest>) {
+    fun selectAllQuestsInstance(quests: List<DiscordQuest>) {
         Companion.selectAllQuests(quests)
     }
 
-    fun deselectAllQuests() {
+    fun deselectAllQuestsInstance() {
         Companion.deselectAllQuests()
     }
 
@@ -290,13 +290,13 @@ class DiscordQuestService : Service() {
 
                             if (!isEnrolled) {
                                 log("Skipped: Quest must be accepted / enrolled first before progress can be simulated.", "warn")
-                                // update quest status in state
                                 updateQuestProgressInList(quest.id, enrolled = false, completed = false)
                                 return@launch
                             }
 
-                            // Process Quest Types
-                            if (quest.type == "WATCH_VIDEO") {
+                            // Process Quest Types (Hỗ trợ cả WATCH_VIDEO và WATCH_VIDEO_ON_MOBILE)
+                            val supportedVideoTasks = listOf("WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE")
+                            if (quest.type == "WATCH_VIDEO" || supportedVideoTasks.contains(quest.taskKeyName)) {
                                 processVideoQuest(token, quest)
                             } else {
                                 // Game, Stream, Activity, Achievement
@@ -325,60 +325,40 @@ class DiscordQuestService : Service() {
     }
 
     private suspend fun processVideoQuest(token: String, quest: DiscordQuest) {
-        log("Playing video simulator for \"${quest.name}\". Target: ${quest.target} seconds...", "info")
-        var currentProgressSecs = quest.currentProgress.toDouble()
-        val targetSecs = quest.target.toDouble()
-        
-        var failuresCount = 0
+        val targetSecs = quest.target.coerceAtLeast(0)
+        var currentProgressSecs = quest.currentProgress.coerceAtLeast(0)
+        val speed = 7 // Tốc độ tua (giây mỗi lần gửi request)
+
+        log("Bắt đầu tự động spoof video cho \"${quest.name}\" (${currentProgressSecs}/${targetSecs}s)...", "info")
+
+        if (targetSecs == 0) {
+            log("Video Quest \"${quest.name}\": Discord không trả về thời lượng mục tiêu.", "warn")
+            return
+        }
 
         while (currentProgressSecs < targetSecs && _isExecuting.value) {
-            // Simulator sleep (interval: 7.5 - 9.5 seconds)
-            val randomStepTime = Random.nextDouble(7.5, 9.5)
-            log("Streaming video buffer... wait ${String.format("%.1f", randomStepTime)}s (Progress: ${currentProgressSecs.toInt()}/${quest.target}s)...", "debug")
-            delay((randomStepTime * 1000).toLong())
+            val remaining = minOf(speed, targetSecs - currentProgressSecs)
+            delay(remaining * 1000L)
 
-            currentProgressSecs += randomStepTime
-            if (currentProgressSecs > targetSecs) {
-                currentProgressSecs = targetSecs
-            }
-
-            // Ping
+            val timestamp = currentProgressSecs + speed
+            // Gọi API POST video-progress đã có sẵn trong DiscordHttpClient
             val res = withContext(Dispatchers.IO) {
-                DiscordHttpClient.sendVideoProgress(token, quest.id, currentProgressSecs)
+                DiscordHttpClient.sendVideoProgress(token, quest.id, minOf(targetSecs, timestamp).toDouble())
             }
 
             if (res.isSuccessful) {
-                failuresCount = 0
-                // Verify server progress value
-                val serverVal = try {
-                    val obj = JSONObject(res.body)
-                    val progressObj = obj.optJSONObject("progress")
-                    val taskDef = progressObj?.optJSONObject(quest.taskKeyName) ?: progressObj?.optJSONObject("WATCH_VIDEO")
-                    taskDef?.optDouble("value") ?: currentProgressSecs
-                } catch (e: Exception) {
-                    currentProgressSecs
-                }
-                if (serverVal > currentProgressSecs) {
-                    currentProgressSecs = serverVal
-                }
-                updateQuestProgressInList(quest.id, true, currentProgressSecs.toInt(), currentProgressSecs >= targetSecs)
-            } else if (res.isRateLimit) {
-                failuresCount++
-                val s = res.retryAfterSeconds ?: 4
-                log("Rate Limit Hit! Backing off for $s seconds...", "warn")
-                delay((s + 1) * 1000)
+                currentProgressSecs = minOf(targetSecs, timestamp)
+                val percent = ((currentProgressSecs.toDouble() / targetSecs) * 100.0).toInt().coerceIn(0, 100)
+                log("Video Quest \"${quest.name}\": ${currentProgressSecs}/${targetSecs}s (${percent}%)", "progress")
+                updateQuestProgressInList(quest.id, true, currentProgressSecs, currentProgressSecs >= targetSecs)
             } else {
-                failuresCount++
-                log("Progression response warning: HTTP Code ${res.code}.", "warn")
-                if (failuresCount > 5) {
-                    log("Aborted video task: Too many consecutive network API issues.", "err")
-                    break
-                }
+                log("Gửi tiến trình video thất bại: HTTP ${res.code}. Thử lại sau...", "warn")
+                delay(5000)
             }
         }
 
         if (currentProgressSecs >= targetSecs && _isExecuting.value) {
-            log("Video Quest \"${quest.name}\" Completed!", "success")
+            log("Video Quest \"${quest.name}\" đã hoàn thành! Đang tiến hành nhận thưởng...", "success")
             triggerClaimIfNeeded(token, quest)
         }
     }
@@ -395,13 +375,11 @@ class DiscordQuestService : Service() {
         val targetSecs = quest.target
         var failuresCount = 0
 
-        // Send initial heartbeat
         withContext(Dispatchers.IO) {
             DiscordHttpClient.sendHeartbeat(token, quest.id, streamKey, false)
         }
 
         while (currentProgressSecs < targetSecs && _isExecuting.value) {
-            // Heartbeats interval: 19 - 22 seconds
             val delaySeconds = Random.nextInt(19, 22)
             log("Heartbeating simulator... waiting ${delaySeconds}s (Progress: $currentProgressSecs/${quest.target}s)...", "debug")
             delay(delaySeconds * 1000L)
@@ -454,7 +432,6 @@ class DiscordQuestService : Service() {
             }
         }
 
-        // Send Terminal
         withContext(Dispatchers.IO) {
             DiscordHttpClient.sendHeartbeat(token, quest.id, streamKey, true)
         }

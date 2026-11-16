@@ -11,7 +11,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.questcompleter.hbyvca"
+    applicationId = "com.nthanhtai.autoquestga2ns"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -20,13 +20,18 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  // A release keystore is optional for CI builds. If it is not supplied,
+  // Gradle packages an unsigned release APK instead of failing validation.
+  val releaseKeystore = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
+  val releaseStorePassword = System.getenv("STORE_PASSWORD")
+  val releaseKeyPassword = System.getenv("KEY_PASSWORD")
+
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      storeFile = releaseKeystore
+      storePassword = releaseStorePassword
+      keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+      keyPassword = releaseKeyPassword
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
@@ -41,7 +46,15 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      signingConfig = if (
+        releaseKeystore.isFile &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
+      ) {
+        signingConfigs.getByName("release")
+      } else {
+        null
+      }
     }
     debug {
       signingConfig = signingConfigs.getByName("debugConfig")
