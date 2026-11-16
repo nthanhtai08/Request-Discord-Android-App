@@ -42,6 +42,16 @@ jobs:
           fi
           chmod +x ./gradlew
 
+      - name: Decode debug keystore
+        shell: bash
+        run: |
+          if [ -f "debug.keystore.base64" ]; then
+            tr -d '\n\r ' < debug.keystore.base64 | base64 -d > debug.keystore
+            ls -l debug.keystore
+          else
+            echo "debug.keystore.base64 not found, Gradle will use the default debug keystore"
+          fi
+
       - name: Verify Gradle
         run: ./gradlew --version
 
