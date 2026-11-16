@@ -493,7 +493,7 @@ class DiscordQuestService : Service() {
         activeServiceJob?.cancel()
         activeServiceJob = null
         log("Automation loop stopped: $reason", "info")
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
