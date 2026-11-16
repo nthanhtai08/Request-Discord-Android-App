@@ -11,7 +11,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.nthanhtai.autoquestga2ns"
+    applicationId = "com.nthanhtai.autoquest"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -26,6 +26,11 @@ android {
   val releaseStorePassword = System.getenv("STORE_PASSWORD")
   val releaseKeyPassword = System.getenv("KEY_PASSWORD")
 
+  // Custom debug keystore (decoded from debug.keystore.base64 in CI).
+  // If the file is missing, fall back to AGP's auto-generated debug keystore
+  // instead of failing at :app:validateSigningDebug.
+  val debugKeystore = file("${rootDir}/debug.keystore")
+
   signingConfigs {
     create("release") {
       storeFile = releaseKeystore
@@ -33,11 +38,13 @@ android {
       keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
       keyPassword = releaseKeyPassword
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+    if (debugKeystore.isFile) {
+      create("debugConfig") {
+        storeFile = debugKeystore
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
   }
 
@@ -57,7 +64,9 @@ android {
       }
     }
     debug {
-      signingConfig = signingConfigs.getByName("debugConfig")
+      if (debugKeystore.isFile) {
+        signingConfig = signingConfigs.getByName("debugConfig")
+      }
     }
   }
   compileOptions {
