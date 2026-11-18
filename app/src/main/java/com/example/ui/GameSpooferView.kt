@@ -2,7 +2,7 @@ package com.example.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable // <--- 1. Thêm import này
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,12 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle // <--- THÊM IMPORT NÀY VÀO
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.DiscordAccount
 import com.example.data.TaskLog
 import com.example.ui.theme.*
@@ -40,8 +39,8 @@ fun GameSpooferView(
     var wobbleChecked by remember { mutableStateOf(false) }
     var dryRunChecked by remember { mutableStateOf(false) }
 
-    // Theo dõi trạng thái execution của spoofer service
-    val spooferExecuting by com.example.network.DiscordGameTimeService.isExecuting.collectAsStateWithLifecycle()
+    // 2. Sửa lại package thành com.example.service cho đúng vị trí thực tế của file service
+    val spooferExecuting by com.example.service.DiscordGameTimeService.isExecuting.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
