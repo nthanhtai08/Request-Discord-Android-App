@@ -11,6 +11,7 @@ import com.example.data.DiscordQuest
 import com.example.data.TaskLog
 import com.example.network.DiscordHttpClient
 import com.example.service.DiscordQuestService
+import com.example.service.DiscordGameTimeService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -51,7 +52,37 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
                 }
         }
     }
-
+    fun startSpoofing(
+        context: Context,
+        totalHours: Double,
+        titles: Int,
+        batchSize: Int,
+        delayMs: Long,
+        wobble: Boolean,
+        dryRun: Boolean
+    ) {
+        val intent = Intent(context, DiscordGameTimeService::class.java).apply {
+            action = "START_SPOOF"
+            putExtra("TOTAL_HOURS", totalHours)
+            putExtra("TITLES", titles)
+            putExtra("BATCH_SIZE", batchSize)
+            putExtra("DELAY_MS", delayMs)
+            putExtra("WOBBLE", wobble)
+            putExtra("DRY_RUN", dryRun)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+    
+    fun stopSpoofing(context: Context) {
+        val intent = Intent(context, DiscordGameTimeService::class.java).apply {
+            action = "STOP_SPOOF"
+        }
+        context.startService(intent)
+    }
     fun saveTokenAndInit(token: String, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             db.taskLogDao().insertLog(
@@ -133,6 +164,7 @@ class MainViewModel(private val db: AppDatabase) : ViewModel() {
             // Dừng automation đang chạy (nếu có) trước khi xóa token
             DiscordQuestService.requestStop()
             db.discordAccountDao().deleteAccount()
+            DiscordGameTimeService.requestStop()
             db.taskLogDao().clearLogs()
             DiscordQuestService.resetState()
         }
