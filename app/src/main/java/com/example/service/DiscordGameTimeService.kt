@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -27,6 +28,9 @@ import java.util.UUID
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.random.Random
+
+// Đưa ra ngoài class để không cần reflection (an toàn khi bật R8/minify)
+private data class GameItem(val id: String, val name: String, val exe: String)
 
 class DiscordGameTimeService : Service() {
 
@@ -50,6 +54,10 @@ class DiscordGameTimeService : Service() {
 
         private var activeServiceJob: Job? = null
 
+        // Scope riêng cho việc ghi log, không bị huỷ khi service onDestroy
+        // => log cuối ("stopped...") không bị mất.
+        private val logScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
         fun requestStop() {
             _isExecuting.value = false
         }
@@ -67,19 +75,29 @@ class DiscordGameTimeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        if (action == "START_SPOOF") {
-            val totalHours = intent.getDoubleExtra("TOTAL_HOURS", 6000.0)
-            val titles = intent.getIntExtra("TITLES", 250)
-            val batchSize = intent.getIntExtra("BATCH_SIZE", 25)
-            val delayMs = intent.getLongExtra("DELAY_MS", 450L)
-            val wobble = intent.getBooleanExtra("WOBBLE", false)
-            val dryRun = intent.getBooleanExtra("DRY_RUN", false)
+        when (intent?.action) {
+            "START_SPOOF" -> {
+                val totalHours = intent.getDoubleExtra("TOTAL_HOURS", 6000.0)
+                val titles = intent.getIntExtra("TITLES", 250)
+                val batchSize = intent.getIntExtra("BATCH_SIZE", 25)
+                val delayMs = intent.getLongExtra("DELAY_MS", 450L)
+                val wobble = intent.getBooleanExtra("WOBBLE", false)
+                val dryRun = intent.getBooleanExtra("DRY_RUN", false)
 
-            startForegroundServiceNotification("Initializing game time spoofer...")
-            runSpooferFlow(totalHours, titles, batchSize, delayMs, wobble, dryRun)
-        } else if (action == "STOP_SPOOF") {
-            stopSpooferFlow("Stopped by user")
+                // Phải gọi startForeground ngay, nếu không Android sẽ kill app
+                try {
+                    startForegroundServiceNotification("Initializing game time spoofer...")
+                } catch (e: Exception) {
+                    Log.e(TAG, "startForeground failed: ${e.message}", e)
+                    log("Cannot start foreground service: ${e.message}", "err")
+                    _isExecuting.value = false
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+
+                runSpooferFlow(totalHours, titles, batchSize, delayMs, wobble, dryRun)
+            }
+            "STOP_SPOOF" -> stopSpooferFlow("Stopped by user")
         }
         return START_NOT_STICKY
     }
@@ -96,7 +114,16 @@ class DiscordGameTimeService : Service() {
     }
 
     private fun startForegroundServiceNotification(message: String) {
-        startForeground(NOTIFICATION_ID, createNotification(message))
+        val notification = createNotification(message)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun createNotification(message: String): Notification {
@@ -116,10 +143,15 @@ class DiscordGameTimeService : Service() {
 
     private fun log(text: String, type: String = "info") {
         Log.d(TAG, "[$type] $text")
-        serviceScope.launch {
-            db.taskLogDao().insertLog(
-                TaskLog(timestamp = System.currentTimeMillis(), text = text, type = type)
-            )
+        val appContext = applicationContext
+        logScope.launch {
+            try {
+                AppDatabase.getDatabase(appContext).taskLogDao().insertLog(
+                    TaskLog(timestamp = System.currentTimeMillis(), text = text, type = type)
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "log insert failed: ${e.message}")
+            }
         }
     }
 
@@ -148,7 +180,7 @@ class DiscordGameTimeService : Service() {
 
                 val token = account.token
 
-                // 1. Lấy thông tin user & analytics token qua DiscordHttpClient
+                // 1. Lấy thông tin user & analytics token
                 val meObj = withContext(Dispatchers.IO) {
                     DiscordHttpClient.getMeWithAnalytics(token)
                 }
@@ -171,7 +203,7 @@ class DiscordGameTimeService : Service() {
 
                 val fingerprint = generateFingerprint(userId)
 
-                // 2. Lấy danh sách catalog game qua DiscordHttpClient hoặc CDN
+                // 2. Lấy danh sách catalog game
                 log("Fetching game catalogs...", "info")
                 var rawCatalogArray = withContext(Dispatchers.IO) {
                     DiscordHttpClient.getDetectableApplications(token)
@@ -190,7 +222,6 @@ class DiscordGameTimeService : Service() {
                     }
                 }
 
-                data class GameItem(val id: String, val name: String, val exe: String)
                 val catalog = mutableListOf<GameItem>()
                 val seen = mutableSetOf<String>()
 
@@ -212,7 +243,8 @@ class DiscordGameTimeService : Service() {
                         }
                     }
                     if (winExe == null && executables != null && executables.length() > 0) continue
-                    val exe = winExe ?: "${name.replace(Regex("[^a-zA-Z0-9]"), "").lowercase().ifEmpty { "game" }}.exe"
+                    val exe = winExe
+                        ?: "${name.replace(Regex("[^a-zA-Z0-9]"), "").lowercase().ifEmpty { "game" }}.exe"
                     seen.add(id)
                     catalog.add(GameItem(id, name, exe))
                 }
@@ -223,23 +255,27 @@ class DiscordGameTimeService : Service() {
                     return@launch
                 }
 
-                val selected = catalog.shuffled().take(min(titles, catalog.size))
+                val safeBatch = maxOf(1, batchSize)
+                val selected = catalog.shuffled().take(min(maxOf(1, titles), catalog.size))
                 val hoursPerGame = totalHours / maxOf(1, selected.size)
 
-                log("Connected as $username | Target: ${totalHours}h across ${selected.size} games (~${String.format("%.1f", hoursPerGame)}h/game)", "success")
+                log(
+                    "Connected as $username | Target: ${totalHours}h across ${selected.size} games (~${String.format("%.1f", hoursPerGame)}h/game)",
+                    "success"
+                )
 
                 val heartbeatId = UUID.randomUUID().toString()
                 val signature = UUID.randomUUID().toString()
                 var seq = 0
 
-                val totalBatches = ceil(selected.size.toDouble() / batchSize).toInt()
+                val totalBatches = ceil(selected.size.toDouble() / safeBatch).toInt()
                 var loggedHours = 0.0
                 var forgedCount = 0
 
                 for (i in 0 until totalBatches) {
                     if (!_isExecuting.value) break
 
-                    val chunk = selected.subList(i * batchSize, min((i + 1) * batchSize, selected.size))
+                    val chunk = selected.subList(i * safeBatch, min((i + 1) * safeBatch, selected.size))
                     val eventsArray = JSONArray()
                     var chunkHours = 0.0
 
@@ -259,6 +295,7 @@ class DiscordGameTimeService : Service() {
                     }
 
                     updateNotification("Processing batch ${i + 1}/$totalBatches")
+                    _currentStatus.value = "Batch ${i + 1}/$totalBatches"
 
                     if (dryRun) {
                         forgedCount += chunk.size
@@ -287,12 +324,17 @@ class DiscordGameTimeService : Service() {
                     delay(maxOf(100L, jitter))
                 }
 
-                log("Done: $forgedCount/${selected.size} games forged | Total playtime: ${String.format("%.1f", loggedHours)}h", "success")
+                log(
+                    "Done: $forgedCount/${selected.size} games forged | Total playtime: ${String.format("%.1f", loggedHours)}h",
+                    "success"
+                )
                 stopSpooferFlow("Done! Playtime forged successfully.")
 
             } catch (e: CancellationException) {
                 log("Spoofer process canceled.", "warn")
+                throw e
             } catch (e: Exception) {
+                Log.e(TAG, "Spoofer error", e)
                 log("Spoofer error state: ${e.message}", "err")
                 stopSpooferFlow("Crash: ${e.message}")
             }
@@ -311,13 +353,13 @@ class DiscordGameTimeService : Service() {
         val buf = ByteArray(146)
         buf[0] = 1
         buf[1] = 1
-        
+
         val bigVal = 65432100L
         for (i in 0..7) buf[2 + i] = ((bigVal shr (i * 8)) and 0xFF).toByte()
-        
+
         val timestamp = 1690000000
         for (i in 0..3) buf[10 + i] = ((timestamp shr (i * 8)) and 0xFF).toByte()
-        
+
         val flags = 0x02500000
         for (i in 0..3) buf[14 + i] = ((flags shr (i * 8)) and 0xFF).toByte()
 
@@ -334,20 +376,22 @@ class DiscordGameTimeService : Service() {
         return Base64.encodeToString(buf, Base64.NO_WRAP)
     }
 
-    private fun buildLaunchJson(game: Any, timestamp: Long, heartbeatId: String, signature: String, seq: Int, fingerprint: String): JSONObject {
-        val clazz = game.javaClass
-        val id = clazz.getMethod("getId").invoke(game) as? String ?: ""
-        val name = clazz.getMethod("getName").invoke(game) as? String ?: ""
-        val exe = clazz.getMethod("getExe").invoke(game) as? String ?: ""
-
+    private fun buildLaunchJson(
+        game: GameItem,
+        timestamp: Long,
+        heartbeatId: String,
+        signature: String,
+        seq: Int,
+        fingerprint: String
+    ): JSONObject {
         return JSONObject().apply {
             put("type", "launch_game")
             put("properties", JSONObject().apply {
                 put("client_track_timestamp", timestamp)
                 put("client_heartbeat_session_id", heartbeatId)
                 put("event_sequence_number", seq)
-                put("game", name)
-                put("game_id", id)
+                put("game", game.name)
+                put("game_id", game.id)
                 put("verified", true)
                 put("elevated", false)
                 put("is_launcher", false)
@@ -363,7 +407,7 @@ class DiscordGameTimeService : Service() {
                 put("activity_status_shared_guilds", JSONArray())
                 put("current_user_status", "online")
                 put("game_detection_enabled", true)
-                put("executable_path", exe)
+                put("executable_path", game.exe)
                 put("voice_channel_id", JSONObject.NULL)
                 put("voice_channel_type", JSONObject.NULL)
                 put("voice_channel_bitrate", JSONObject.NULL)
@@ -384,22 +428,28 @@ class DiscordGameTimeService : Service() {
         }
     }
 
-    private fun buildHeartbeatJson(game: Any, durationMs: Long, sid: String, initial: Boolean, final: Boolean, timestamp: Long, heartbeatId: String, signature: String, seq: Int, fingerprint: String): JSONObject {
-        val clazz = game.javaClass
-        val id = clazz.getMethod("getId").invoke(game) as? String ?: ""
-        val name = clazz.getMethod("getName").invoke(game) as? String ?: ""
-        val exe = clazz.getMethod("getExe").invoke(game) as? String ?: ""
-
+    private fun buildHeartbeatJson(
+        game: GameItem,
+        durationMs: Long,
+        sid: String,
+        initial: Boolean,
+        final: Boolean,
+        timestamp: Long,
+        heartbeatId: String,
+        signature: String,
+        seq: Int,
+        fingerprint: String
+    ): JSONObject {
         return JSONObject().apply {
             put("type", "running_game_heartbeat")
             put("properties", JSONObject().apply {
                 put("client_track_timestamp", timestamp)
                 put("client_heartbeat_session_id", heartbeatId)
                 put("event_sequence_number", seq)
-                put("game_id", id)
-                put("game_name", name)
+                put("game_id", game.id)
+                put("game_name", game.name)
                 put("game_metadata", JSONObject.NULL)
-                put("game_executable", exe)
+                put("game_executable", game.exe)
                 put("game_detection_enabled", true)
                 put("initial_heartbeat", initial)
                 put("final_heartbeat", final)
