@@ -249,8 +249,98 @@ fun QuestDashboardView(
     onLogout: () -> Unit,
     onRefresh: () -> Unit,
     onOptionChange: (Boolean, Boolean, Boolean) -> Unit,
-    onClearLogs: () -> Unit
+    onClearLogs: () -> Unit,
+    viewModel: MainViewModel
 ) {
+var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoofer
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header tài khoản
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "AutoQuest Hub", fontSize = 24.sp, color = NaturalDarkText, fontWeight = FontWeight.Bold)
+                Text(text = account.username.ifEmpty { "Connected Account" }, fontSize = 12.sp, color = NaturalSecondaryText)
+            }
+
+            IconButton(
+                onClick = { showLogoutDialog = true },
+                modifier = Modifier.clip(CircleShape).background(NaturalSageContainer)
+            ) {
+                Icon(imageVector = Icons.AutoMirrored.Filled.Logout, contentDescription = "Logout", tint = Color(0xFFC0392B))
+            }
+        }
+
+        // Tab Row chuyển đổi giữa Quests và Game Spoofer
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = NaturalBg,
+            contentColor = NaturalPrimary
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = { Text("Quest Automation", fontWeight = FontWeight.Bold) }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = { Text("Game Spoofer", fontWeight = FontWeight.Bold) }
+            )
+        }
+
+        // Nội dung hiển thị tùy theo Tab đang chọn
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (selectedTab == 0) {
+                // Nội dung Quests cũ của bạn (Danh sách quest + terminal log + nút chạy automation)
+                QuestAutomationContent(
+                    quests = quests,
+                    selectedQuestIds = selectedQuestIds,
+                    logs = logs,
+                    isExecuting = isExecuting,
+                    statusText = statusText,
+                    onToggleSelect = onToggleSelect,
+                    onSelectAll = onSelectAll,
+                    onDeselectAll = onDeselectAll,
+                    onRunAutomation = onRunAutomation,
+                    onStopAutomation = onStopAutomation,
+                    onRefresh = onRefresh,
+                    onClearLogs = onClearLogs
+                )
+            } else {
+                // Tab Game Spoofer mới
+                GameSpooferView(
+                    account = account,
+                    logs = logs,
+                    onClearLogs = onClearLogs,
+                    viewModel = viewModel
+                )
+            }
+        }
+    }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Logout Account", fontWeight = FontWeight.Bold) },
+            text = { Text("Bạn có chắc chắn muốn ngắt kết nối tài khoản không?") },
+            confirmButton = {
+                TextButton(onClick = { showLogoutDialog = false; onLogout() }) {
+                    Text("Logout", color = Color(0xFFC0392B))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel", color = NaturalDarkText) }
+            },
+            containerColor = NaturalBg
+        )
+    }
     val sortedQuests = remember(quests) {
         quests.sortedWith(
             compareBy<DiscordQuest> { it.completed } // Keep native API order, just push completed tasks to the bottom
