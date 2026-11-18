@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URL
 import java.security.MessageDigest
 import java.util.UUID
 import kotlin.math.ceil
@@ -177,7 +178,9 @@ class DiscordGameTimeService : Service() {
 
                 if (rawCatalogArray == null || rawCatalogArray.length() == 0) {
                     try {
-                        val cdnRes = URL("https://cdn.discordapp.com/detectables/games.json").readText()
+                        val cdnRes = withContext(Dispatchers.IO) {
+                            URL("https://cdn.discordapp.com/detectables/games.json").readText()
+                        }
                         rawCatalogArray = JSONArray(cdnRes)
                     } catch (e: Exception) {
                         log("Failed to load catalog from CDN: ${e.message}", "err")
@@ -261,7 +264,6 @@ class DiscordGameTimeService : Service() {
                         loggedHours += chunkHours
                         log("[Dry-Run] Batch ${i + 1}/$totalBatches (+${String.format("%.1f", chunkHours)}h)", "info")
                     } else {
-                        // Gọi API science thông qua DiscordHttpClient
                         val res = withContext(Dispatchers.IO) {
                             DiscordHttpClient.sendScienceEvents(token, analyticsToken, eventsArray)
                         }
@@ -332,14 +334,10 @@ class DiscordGameTimeService : Service() {
     }
 
     private fun buildLaunchJson(game: Any, timestamp: Long, heartbeatId: String, signature: String, seq: Int, fingerprint: String): JSONObject {
-        val g = game as? Any ?: return JSONObject()
-        // reflection hoặc cast tuỳ ý, ở đây dùng cách lấy property qua toString/map hoặc định nghĩa lại data class nhỏ gọn
-        val id = (game as? Any)?.let { 
-            // lấy trực tiếp từ đối tượng game
-            it.javaClass.getMethod("getId").invoke(it) as? String
-        } ?: ""
-        val name = (game as? Any)?.let { it.javaClass.getMethod("getName").invoke(it) as? String } ?: ""
-        val exe = (game as? Any)?.let { it.javaClass.getMethod("getExe").invoke(it) as? String } ?: ""
+        val clazz = game.javaClass
+        val id = clazz.getMethod("getId").invoke(game) as? String ?: ""
+        val name = clazz.getMethod("getName").invoke(game) as? String ?: ""
+        val exe = clazz.getMethod("getExe").invoke(game) as? String ?: ""
 
         return JSONObject().apply {
             put("type", "launch_game")
@@ -374,7 +372,7 @@ class DiscordGameTimeService : Service() {
                 put("executable_fingerprint", fingerprint)
                 put("client_performance_cpu", JSONObject.NULL)
                 put("client_performance_memory", JSONObject.NULL)
-                put("cpu_core_count", null as Any?)
+                put("cpu_core_count", JSONObject.NULL)
                 put("accessibility_features", 0)
                 put("rendered_locale", "en-US")
                 put("launch_signature", signature)
@@ -386,9 +384,10 @@ class DiscordGameTimeService : Service() {
     }
 
     private fun buildHeartbeatJson(game: Any, durationMs: Long, sid: String, initial: Boolean, final: Boolean, timestamp: Long, heartbeatId: String, signature: String, seq: Int, fingerprint: String): JSONObject {
-        val id = (game as? Any)?.let { it.javaClass.getMethod("getId").invoke(it) as? String } ?: ""
-        val name = (game as? Any)?.let { it.javaClass.getMethod("getName").invoke(it) as? String } ?: ""
-        val exe = (game as? Any)?.let { it.javaClass.getMethod("getExe").invoke(it) as? String } ?: ""
+        val clazz = game.javaClass
+        val id = clazz.getMethod("getId").invoke(game) as? String ?: ""
+        val name = clazz.getMethod("getName").invoke(game) as? String ?: ""
+        val exe = clazz.getMethod("getExe").invoke(game) as? String ?: ""
 
         return JSONObject().apply {
             put("type", "running_game_heartbeat")
