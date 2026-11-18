@@ -115,8 +115,37 @@ object DiscordHttpClient {
         }
         return null
     }
+    fun getMeWithAnalytics(token: String): JSONObject? {
+        val res = makeRequest("$BASE_URL/users/@me?with_analytics_token=true", "GET", null, token)
+        if (res.isSuccessful) {
+            try {
+                return JSONObject(res.body)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing user analytics info", e)
+            }
+        }
+        return null
+    }
 
-    // 2. Fetch User Channel List
+    fun getDetectableApplications(token: String): JSONArray? {
+        val res = makeRequest("$BASE_URL/applications/detectable", "GET", null, token)
+        if (res.isSuccessful) {
+            try {
+                return JSONArray(res.body)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing detectable applications", e)
+            }
+        }
+        return null
+    }
+
+    fun sendScienceEvents(token: String, analyticsToken: String, events: JSONArray): HttpResponse {
+        val body = JSONObject().apply {
+            put("token", analyticsToken)
+            put("events", events)
+        }.toString()
+        return makeRequest("$BASE_URL/science", "POST", body, token)
+    }
     fun getChannels(token: String): List<String> {
         val channels = mutableListOf<String>()
         val res = makeRequest("$BASE_URL/users/@me/channels", "GET", null, token)
