@@ -92,10 +92,8 @@ fun DashboardScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     onStopAutomation = { viewModel.stopAutomation(context) },
                     onLogout = { viewModel.logout() },
                     onRefresh = { viewModel.refreshQuests(activeAccount.token) },
-                    onOptionChange = { enroll, claim, sound ->
-                        viewModel.updateAccountOptions(enroll, claim, sound)
-                    },
-                    onClearLogs = { viewModel.clearLogs() }
+                    onClearLogs = { viewModel.clearLogs() },
+                    viewModel = viewModel
                 )
             }
         }
@@ -115,7 +113,6 @@ fun TokenSetupView(onVerifyClick: (String) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // App Title Section
         Column(
             modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
             horizontalAlignment = Alignment.Start
@@ -135,17 +132,13 @@ fun TokenSetupView(onVerifyClick: (String) -> Unit) {
             )
         }
 
-        // Card Container setup
         Card(
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = NaturalSageContainer),
             shape = RoundedCornerShape(28.dp),
             border = BorderStroke(1.dp, NaturalBorder)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp)
-            ) {
+            Column(modifier = Modifier.padding(24.dp)) {
                 Text(
                     text = "DISCORD TOKEN",
                     fontSize = 11.sp,
@@ -172,11 +165,7 @@ fun TokenSetupView(onVerifyClick: (String) -> Unit) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Key,
-                            contentDescription = "Key",
-                            tint = NaturalSecondaryText
-                        )
+                        Icon(imageVector = Icons.Default.Key, contentDescription = "Key", tint = NaturalSecondaryText)
                     },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -202,7 +191,6 @@ fun TokenSetupView(onVerifyClick: (String) -> Unit) {
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Large rounded green CTA button
         Button(
             onClick = { if (rawToken.trim().isNotEmpty()) onVerifyClick(rawToken.trim()) },
             enabled = rawToken.trim().isNotEmpty(),
@@ -213,26 +201,15 @@ fun TokenSetupView(onVerifyClick: (String) -> Unit) {
                 disabledContentColor = NaturalSecondaryText
             ),
             shape = RoundedCornerShape(30.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
+            modifier = Modifier.fillMaxWidth().height(60.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Key,
-                contentDescription = "Login",
-                modifier = Modifier.size(20.dp)
-            )
+            Icon(imageVector = Icons.Default.Key, contentDescription = "Login", modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Connect Account",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(text = "Connect Account", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun QuestDashboardView(
     account: DiscordAccount,
@@ -248,15 +225,14 @@ fun QuestDashboardView(
     onStopAutomation: () -> Unit,
     onLogout: () -> Unit,
     onRefresh: () -> Unit,
-    onOptionChange: (Boolean, Boolean, Boolean) -> Unit,
     onClearLogs: () -> Unit,
     viewModel: MainViewModel
 ) {
-var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoofer
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoofer
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header tài khoản
+        // Top Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -269,6 +245,17 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
                 Text(text = account.username.ifEmpty { "Connected Account" }, fontSize = 12.sp, color = NaturalSecondaryText)
             }
 
+            if (selectedTab == 0) {
+                IconButton(
+                    onClick = onRefresh,
+                    enabled = !isExecuting,
+                    modifier = Modifier.clip(CircleShape).background(NaturalSageContainer)
+                ) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh", tint = NaturalPrimary, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
             IconButton(
                 onClick = { showLogoutDialog = true },
                 modifier = Modifier.clip(CircleShape).background(NaturalSageContainer)
@@ -277,7 +264,7 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
             }
         }
 
-        // Tab Row chuyển đổi giữa Quests và Game Spoofer
+        // Tabs Row
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = NaturalBg,
@@ -295,11 +282,10 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
             )
         }
 
-        // Nội dung hiển thị tùy theo Tab đang chọn
+        // Body content based on active tab
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (selectedTab == 0) {
-                // Nội dung Quests cũ của bạn (Danh sách quest + terminal log + nút chạy automation)
-                QuestAutomationContent(
+                QuestAutomationTabContent(
                     quests = quests,
                     selectedQuestIds = selectedQuestIds,
                     logs = logs,
@@ -310,11 +296,9 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
                     onDeselectAll = onDeselectAll,
                     onRunAutomation = onRunAutomation,
                     onStopAutomation = onStopAutomation,
-                    onRefresh = onRefresh,
                     onClearLogs = onClearLogs
                 )
             } else {
-                // Tab Game Spoofer mới
                 GameSpooferView(
                     account = account,
                     logs = logs,
@@ -329,7 +313,7 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             title = { Text("Logout Account", fontWeight = FontWeight.Bold) },
-            text = { Text("Bạn có chắc chắn muốn ngắt kết nối tài khoản không?") },
+            text = { Text("Are you sure you want to disconnect your Discord account?") },
             confirmButton = {
                 TextButton(onClick = { showLogoutDialog = false; onLogout() }) {
                     Text("Logout", color = Color(0xFFC0392B))
@@ -341,57 +325,27 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
             containerColor = NaturalBg
         )
     }
+}
+
+@Composable
+fun QuestAutomationTabContent(
+    quests: List<DiscordQuest>,
+    selectedQuestIds: Set<String>,
+    logs: List<TaskLog>,
+    isExecuting: Boolean,
+    statusText: String,
+    onToggleSelect: (String) -> Unit,
+    onSelectAll: () -> Unit,
+    onDeselectAll: () -> Unit,
+    onRunAutomation: () -> Unit,
+    onStopAutomation: () -> Unit,
+    onClearLogs: () -> Unit
+) {
     val sortedQuests = remember(quests) {
-        quests.sortedWith(
-            compareBy<DiscordQuest> { it.completed } // Keep native API order, just push completed tasks to the bottom
-        )
+        quests.sortedBy { it.completed }
     }
-    var showLogoutDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
-        // Flat header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "AutoQuest",
-                    fontSize = 24.sp,
-                    color = NaturalDarkText,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Discord Automation Hub",
-                    fontSize = 12.sp,
-                    color = NaturalSecondaryText
-                )
-            }
-
-            // Quick Refresh Button
-            IconButton(
-                onClick = onRefresh,
-                enabled = !isExecuting,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(NaturalSageContainer)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Refresh",
-                    tint = NaturalPrimary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        // Main Layout inside LazyColumn so everything compiles fine across sizes
+    Column(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -399,73 +353,9 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Logged Account card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = NaturalSageContainer),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.dp, NaturalBorder)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Avatar placeholder circle
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(NaturalAccentGreen)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = "Discord avatar placeholder",
-                                tint = NaturalPrimary,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = account.username.ifEmpty { "Connected Account" },
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = NaturalDarkText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "Token: ••••••••" + account.token.takeLast(4),
-                                fontSize = 12.sp,
-                                color = NaturalSecondaryText
-                            )
-                        }
-
-                        IconButton(onClick = { showLogoutDialog = true }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = "Logout",
-                                tint = Color(0xFFC0392B)
-                            )
-                        }
-                    }
-                }
-            }
-
-
-
-            // 3. active / Selectable quests
             item {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -485,10 +375,7 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .bounceClick(allInteraction)
-                                .clickable(
-                                    interactionSource = allInteraction,
-                                    indication = null
-                                ) { onSelectAll() }
+                                .clickable(interactionSource = allInteraction, indication = null) { onSelectAll() }
                                 .padding(8.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -500,10 +387,7 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .bounceClick(noneInteraction)
-                                .clickable(
-                                    interactionSource = noneInteraction,
-                                    indication = null
-                                ) { onDeselectAll() }
+                                .clickable(interactionSource = noneInteraction, indication = null) { onDeselectAll() }
                                 .padding(8.dp)
                         )
                     }
@@ -519,31 +403,12 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
                         border = BorderStroke(1.dp, NaturalBorder)
                     ) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Inbox,
-                                contentDescription = "Empty",
-                                tint = NaturalSecondaryText,
-                                modifier = Modifier.size(40.dp)
-                            )
+                            Icon(imageVector = Icons.Default.Inbox, contentDescription = null, tint = NaturalSecondaryText, modifier = Modifier.size(40.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "Không tìm thấy nhiệm vụ nào",
-                                fontSize = 14.sp,
-                                color = NaturalDarkText,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Hãy ấn vào biểu tượng làm mới ở góc phải để tải danh sách nhiệm vụ từ Discord.",
-                                fontSize = 11.sp,
-                                color = NaturalSecondaryText,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp)
-                            )
+                            Text(text = "Không tìm thấy nhiệm vụ nào", fontSize = 14.sp, color = NaturalDarkText, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -557,31 +422,14 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
                 }
             }
 
-            // 4. Console log output
             item {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Real-Time Terminal Output",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = NaturalDarkText
-                    )
-
-                    Text(
-                        text = "Clear Term",
-                        fontSize = 12.sp,
-                        color = Color(0xFFC0392B),
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier
-                            .clickable { onClearLogs() }
-                            .padding(8.dp)
-                    )
+                    Text(text = "Real-Time Terminal Output", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = NaturalDarkText)
+                    Text(text = "Clear Term", fontSize = 12.sp, color = Color(0xFFC0392B), fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onClearLogs() }.padding(8.dp))
                 }
             }
 
@@ -595,333 +443,188 @@ var selectedTab by remember { mutableIntStateOf(0) } // 0: Quests, 1: Game Spoof
                         .padding(12.dp)
                 ) {
                     val logScrollState = rememberScrollState()
-
-                    // Auto scroll logs console to bottom
                     LaunchedEffect(logs.size) {
                         logScrollState.animateScrollTo(logScrollState.maxValue)
                     }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(logScrollState)
-                    ) {
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(logScrollState)) {
                         if (logs.isEmpty()) {
-                            Text(
-                                text = "Lớp nhập ký tự rỗng. Nhấn 'Chạy Tự Động' để bắt đầu ghi nhật ký...",
-                                color = NaturalLogGreen.copy(alpha = 0.5f),
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp
-                            )
+                            Text(text = "Chờ khởi chạy automation...", color = NaturalLogGreen.copy(alpha = 0.5f), fontSize = 11.sp)
                         } else {
-                            // Reverse order to display oldest-to-newest sequentially in the console row
-                            logs.asReversed().forEach { log ->
-                                LogRow(log)
-                            }
+                            logs.asReversed().forEach { log -> LogRow(log) }
                         }
                     }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(60.dp)) }
+            item { Spacer(modifier = Modifier.height(40.dp)) }
         }
 
-        // Sticky Bottom Controllers
-        val activeScale by animateFloatAsState(
-            targetValue = if (isExecuting) 0.96f else 1.0f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "activeScale"
-        )
-        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-        val pulseScale by infiniteTransition.animateFloat(
-            initialValue = 0.98f,
-            targetValue = 1.02f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1000, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulseScale"
-        )
-
+        // Bottom Bar Automation
         Surface(
             modifier = Modifier.fillMaxWidth(),
             tonalElevation = 8.dp,
             border = BorderStroke(1.dp, NaturalBorder),
             color = NaturalBg
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                // Background task running details
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 if (isExecuting) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = NaturalPrimary,
-                            strokeWidth = 2.dp
-                        )
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = NaturalPrimary, strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = statusText,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = NaturalPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Text(text = statusText, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = NaturalPrimary, maxLines = 1)
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Button(
+                    onClick = { if (!isExecuting) onRunAutomation() else onStopAutomation() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isExecuting) Color(0xFFC0392B) else NaturalPrimary,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(30.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    if (!isExecuting) {
-                        val runInteraction = remember { MutableInteractionSource() }
-                        Button(
-                            onClick = onRunAutomation,
-                            colors = ButtonDefaults.buttonColors(containerColor = NaturalPrimary, contentColor = Color.White),
-                            shape = RoundedCornerShape(30.dp),
-                            interactionSource = runInteraction,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp)
-                                .bounceClick(runInteraction)
-                                .graphicsLayer(scaleX = activeScale, scaleY = activeScale)
-                        ) {
-                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Run")
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Chạy Tự Động", fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        val stopInteraction = remember { MutableInteractionSource() }
-                        Button(
-                            onClick = onStopAutomation,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC0392B), contentColor = Color.White),
-                            shape = RoundedCornerShape(30.dp),
-                            interactionSource = stopInteraction,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp)
-                                .bounceClick(stopInteraction)
-                                .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale)
-                        ) {
-                            Icon(imageVector = Icons.Default.Stop, contentDescription = "Stop")
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Dừng Lại", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    Icon(imageVector = if (isExecuting) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = if (isExecuting) "Dừng Lại" else "Chạy Tự Động", fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
+}
 
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("Logout Account", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to disconnect your Discord account? This will clear all logs and credentials locally.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showLogoutDialog = false
-                        onLogout()
-                    }
-                ) {
-                    Text("Logout", color = Color(0xFFC0392B))
+@Composable
+fun GameSpooferView(
+    account: DiscordAccount,
+    logs: List<TaskLog>,
+    onClearLogs: () -> Unit,
+    viewModel: MainViewModel
+) {
+    val context = LocalContext.current
+    var totalHoursInput by remember { mutableStateOf("6000") }
+    var titlesInput by remember { mutableStateOf("250") }
+    var batchSizeInput by remember { mutableStateOf("25") }
+    var wobbleChecked by remember { mutableStateOf(false) }
+    var dryRunChecked by remember { mutableStateOf(false) }
+
+    val spooferExecuting by com.example.network.DiscordGameTimeService.isExecuting.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = NaturalSageContainer),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, NaturalBorder)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = "Game Time Spoofer Config", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = NaturalDarkText)
+
+                OutlinedTextField(value = totalHoursInput, onValueChange = { totalHoursInput = it }, label = { Text("Tổng số giờ cày") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = titlesInput, onValueChange = { titlesInput = it }, label = { Text("Số lượng game") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(value = batchSizeInput, onValueChange = { batchSizeInput = it }, label = { Text("Batch Size") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Dao động giờ (Wobble)", fontSize = 14.sp, color = NaturalDarkText)
+                    Switch(checked = wobbleChecked, onCheckedChange = { wobbleChecked = it })
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Chạy thử (Dry Run)", fontSize = 14.sp, color = NaturalDarkText)
+                    Switch(checked = dryRunChecked, onCheckedChange = { dryRunChecked = it })
+                }
+            }
+        }
+
+        Button(
+            onClick = {
+                if (!spooferExecuting) {
+                    val hours = totalHoursInput.toDoubleOrNull() ?: 6000.0
+                    val titles = titlesInput.toIntOrNull() ?: 250
+                    val batch = batchSizeInput.toIntOrNull() ?: 25
+                    viewModel.startSpoofing(context, hours, titles, batch, 450L, wobbleChecked, dryRunChecked)
+                } else {
+                    viewModel.stopSpoofing(context)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancel", color = NaturalDarkText)
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (spooferExecuting) Color(0xFFC0392B) else NaturalPrimary,
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(30.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) {
+            Icon(imageVector = if (spooferExecuting) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = if (spooferExecuting) "Dừng Game Spoofer" else "Chạy Game Spoofer", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(text = "Spoofer Terminal Output", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = NaturalDarkText)
+            Text(text = "Clear Term", fontSize = 12.sp, color = Color(0xFFC0392B), fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onClearLogs() }.padding(8.dp))
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(NaturalDarkSoot)
+                .padding(12.dp)
+        ) {
+            val logScrollState = rememberScrollState()
+            LaunchedEffect(logs.size) {
+                logScrollState.animateScrollTo(logScrollState.maxValue)
+            }
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(logScrollState)) {
+                if (logs.isEmpty()) {
+                    Text(text = "Chưa có bản ghi log nào...", color = NaturalLogGreen.copy(alpha = 0.5f), fontSize = 11.sp)
+                } else {
+                    logs.asReversed().forEach { log -> LogRow(log) }
                 }
-            },
-            containerColor = NaturalBg
-        )
+            }
+        }
+        Spacer(modifier = Modifier.height(40.dp))
     }
 }
 
 @Composable
-fun QuestCard(
-    quest: DiscordQuest,
-    isSelected: Boolean,
-    onToggle: () -> Unit
-) {
-    val progressPercent = if (quest.target > 0) {
-        (quest.currentProgress.toFloat() / quest.target.toFloat()).coerceIn(0f, 1f)
-    } else 0f
+fun QuestCard(quest: DiscordQuest, isSelected: Boolean, onToggle: () -> Unit) {
+    val progressPercent = if (quest.target > 0) (quest.currentProgress.toFloat() / quest.target.toFloat()).coerceIn(0f, 1f) else 0f
+    val animatedProgress by animateFloatAsState(targetValue = progressPercent, label = "progress")
 
-    val animatedProgress by animateFloatAsState(
-        targetValue = progressPercent,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
-        label = "animatedProgress"
-    )
-
-    // Color indicators based on state
-    val statusColor = when {
-        quest.completed -> Color(0xFF386B20)
-        else -> NaturalPrimary
-    }
-
-    val stateLabel = when {
-        quest.completed -> "Hoàn Thành"
-        quest.enrolled -> "Đang Tiến Hành"
-        else -> "Trống (Chờ Nhận)"
-    }
-
-    val iconSymbol = when (quest.type) {
-        "WATCH_VIDEO" -> Icons.Default.VideoLibrary
-        "GAME" -> Icons.Default.SportsEsports
-        "STREAM" -> Icons.Default.LiveTv
-        "ACTIVITY" -> Icons.Default.Campaign
-        else -> Icons.Default.Star
-    }
-
-    val cardInteractionSource = remember { MutableInteractionSource() }
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .bounceClick(cardInteractionSource)
-            .clickable(
-                interactionSource = cardInteractionSource,
-                indication = LocalIndication.current,
-                enabled = !quest.completed
-            ) { onToggle() },
+        modifier = Modifier.fillMaxWidth().clickable(enabled = !quest.completed) { onToggle() },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = BorderStroke(1.dp, if (isSelected && !quest.completed) NaturalPrimary else NaturalBorder)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Checkbox for selection (Hidden if already completed)
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!quest.completed) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onToggle() },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = NaturalPrimary,
-                        uncheckedColor = NaturalBorder
-                    )
-                )
+                Checkbox(checked = isSelected, onCheckedChange = { onToggle() })
                 Spacer(modifier = Modifier.width(4.dp))
             } else {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(NaturalAccentGreen),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Done",
-                        tint = NaturalPrimary,
-                        modifier = Modifier.size(14.dp)
-                    )
+                Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(NaturalAccentGreen), contentAlignment = Alignment.Center) {
+                    Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = NaturalPrimary, modifier = Modifier.size(14.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
             }
 
-            // Central icon
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(NaturalAccentGreen)
-            ) {
-                Icon(
-                    imageVector = iconSymbol,
-                    contentDescription = "Quest type",
-                    tint = NaturalPrimary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stateLabel.uppercase(),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor,
-                        letterSpacing = 0.5.sp
-                    )
-                    Text(
-                        text = "${quest.type}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = NaturalSecondaryText
-                    )
-                }
-
-                Text(
-                    text = quest.name,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NaturalDarkText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-
-                // Sub details with rewards
-                Text(
-                    text = "Qùa tặng: ${quest.rewardName}",
-                    fontSize = 12.sp,
-                    color = NaturalSecondaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
+                Text(text = quest.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NaturalDarkText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = "Quà tặng: ${quest.rewardName}", fontSize = 12.sp, color = NaturalSecondaryText, maxLines = 1)
+                
                 if (!quest.completed) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Tiến độ",
-                            fontSize = 11.sp,
-                            color = NaturalSecondaryText
-                        )
-                        Text(
-                            text = "${quest.currentProgress} / ${quest.target}s",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = NaturalDarkText
-                        )
-                    }
-
-                    LinearProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = NaturalPrimary,
-                        trackColor = NaturalSageContainer
-                    )
+                    LinearProgressIndicator(progress = { animatedProgress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)), color = NaturalPrimary, trackColor = NaturalSageContainer)
                 }
             }
         }
@@ -932,35 +635,16 @@ fun QuestCard(
 fun LogRow(log: TaskLog) {
     val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     val formattedTime = sdf.format(Date(log.timestamp))
-
     val color = when (log.type) {
         "success" -> Color(0xFF4CAF50)
         "warn" -> Color(0xFFFFBF00)
         "err" -> Color(0xFFF44336)
-        "debug" -> NaturalLogGreen.copy(alpha = 0.5f)
         else -> NaturalLogGreen
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            text = "[$formattedTime] ",
-            color = NaturalLogGreen.copy(alpha = 0.4f),
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp
-        )
-        Text(
-            text = log.text,
-            color = color,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            lineHeight = 15.sp,
-            modifier = Modifier.weight(1f)
-        )
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.Top) {
+        Text(text = "[$formattedTime] ", color = NaturalLogGreen.copy(alpha = 0.4f), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        Text(text = log.text, color = color, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.weight(1f))
     }
 }
 
