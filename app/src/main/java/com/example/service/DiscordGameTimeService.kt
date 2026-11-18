@@ -1,4 +1,4 @@
-package com.example.network
+package com.example.service
 
 import android.app.Notification
 import android.app.NotificationChannel
